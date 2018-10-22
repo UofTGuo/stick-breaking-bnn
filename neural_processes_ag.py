@@ -14,7 +14,7 @@ from autograd.misc import flatten
 from autograd.misc.optimizers import adam
 
 def diag_gaussian_log_density(x, mu, log_std):
-    return np.sum(norm.logpdf(x, mu, np.exp(log_std)), axis=-1)
+    return np.sum(norm.logpdf(x, mu, np.exp(log_std)), axis=-1) # the axis=-1 sums over the points in the last index
 
 def unpack_gaussian_params(params):
     # Params of a diagonal Gaussian.
@@ -87,8 +87,9 @@ def logp_ystar_given_xstar_z(test_set, z, gen_params):
     # the first column of test_set contains x_star, the second column contains y_star
     # z is a number
     # gen_params is a list of weights
-    u_ystar, log_std_ystar = unpack_gaussian_params(decoder_g(gen_params, z, test_set))
-    return diag_gaussian_log_density(test_set, u_ystar, log_std_ystar)
+    #u_ystar, log_std_ystar = unpack_gaussian_params(decoder_g(gen_params, z, test_set))
+    y_star = decoder_g(gen_params, z, test_set)
+    return y_star
 
 
 def elbo(gen_params, rec_params, context, test, rs):
@@ -100,10 +101,14 @@ def elbo(gen_params, rec_params, context, test, rs):
     q_mean_context, q_log_stds_context = get_z_params(aggregator_r(encoder_h(rec_params, context )))
 
     # STEP 1: sample z ~ q(z|context, target)
+    # USE MORE THAN ONE SAMPLE
     latent = sample_diag_gaussian(q_means_both, q_log_stds_both, rs)
 
     # STEP 2:
-    loglikelihood = logp_ystar_given_xstar_z(test[:,1:], latent, gen_params).sum() # the 1: may need to change when scaling to higher dim
+    #loglikelihood = logp_ystar_given_xstar_z(test[:,1:], latent, gen_params).sum() # the 1: may need to change when scaling to higher dim
+    loglikelihood = diag_gaussian_log_density( test[:,1:].T,
+                                               decoder_g(gen_params, latent, test[:,:1]).T,
+                                               np.log(0.1)).sum()
 
     q_z_given_context=diag_gaussian_log_density(latent, q_mean_context, q_log_stds_context)
     q_z_given_both=diag_gaussian_log_density(latent, q_means_both, q_log_stds_both)
@@ -146,8 +151,10 @@ if __name__ == '__main__':
     z_dim = 1 # this is the dimension of z
     data_dim = 1  # dimension of input data x
     latent_dim=1 # dimension of r
-    gen_layer_sizes = [z_dim + data_dim, 200, 200, 2] # the architecture of generative network g. 2 corresponds to mu, sigma of y.
-    rec_layer_sizes = [data_dim + 1, 200, 200, 2*latent_dim] # the architecture of encoding network h. + 1 corresponds to response y. 2 corresponds to mu and sigma for z
+    y_dim = 1
+
+    rec_layer_sizes = [data_dim + 1, 30, 30, 2*latent_dim] # the architecture of encoding network h. + 1 corresponds to response y. 2 corresponds to mu and sigma for z
+    gen_layer_sizes = [z_dim + data_dim, 30, 30, y_dim]  # the architecture of generative network g. 2 corresponds to mu, sigma of y.
 
     # Training parameters
     param_scale = 0.01
@@ -167,8 +174,8 @@ if __name__ == '__main__':
     inputs_with_y = np.hstack((inputs, targets))
 
     # SET CONTEXT POINTS
-    context=inputs_with_y[0:50,:]
-    test = inputs_with_y[50:, :]
+    context=inputs_with_y[0:40,:]
+    test = inputs_with_y[40:, :]
 
     #print(inputs)
     #print(targets)
@@ -200,7 +207,8 @@ if __name__ == '__main__':
         latent = sample_diag_gaussian(q_means_both, q_log_stds_both, rs)
 
         #outputs = np.exp(logp_ystar_given_xstar_z(plot_inputs, latent, gen_params)) # p(ystar|z, xstar)
-        outputs, _ = unpack_gaussian_params(decoder_g(gen_params, latent, plot_inputs))
+        #outputs, _ = unpack_gaussian_params(decoder_g(gen_params, latent, plot_inputs))
+        outputs= decoder_g(gen_params, latent, plot_inputs)
 
         #outputs = nn_predict(params, plot_inputs)
         #outputs
@@ -216,4 +224,4 @@ if __name__ == '__main__':
     objective_grad = grad(objective)
 
     optimized_params = adam(objective_grad, combined_init_params,
-                            step_size=0.005, num_iters=1000, callback=callback)
+                            step_size=0.1, num_iters=1000, callback=callback)
