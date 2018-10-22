@@ -16,11 +16,13 @@ from autograd.scipy.special import expit as sigmoid
 from autograd import grad
 from autograd.misc.optimizers import adam
 
+def rbf(x): return np.exp(-x**2)
 def dim(x): return x[0].shape[0]
 def relu(x):    return np.maximum(0, x)
 def pack(data):
-    print(data[0].shape, data[1].shape)
+    #print(data[0].shape, data[1].shape)
     return np.concatenate(data, axis=1)
+
 def aggregator(r): return np.mean(r, axis=0) # [dim_data , dim z]-> dim z
 
 
@@ -38,6 +40,9 @@ def sample_diag_gaussian(mean, log_std):
 def multi_sample_diag_gaussian(mean, log_std, n_samples):
     return rs.randn(n_samples, mean.shape[0]) * np.exp(log_std) + mean
 
+def repeat_sample_diag_gaussian(mean, log_std, n_data):
+    samples = sample_diag_gaussian(mean, log_std)
+    return np.tile(samples, (n_data, 1))
 
 def init_net_params(layer_sizes, scale=0.1, rs=npr.RandomState(0)):
     return [(scale * rs.randn(m, n), scale * rs.randn(n))
@@ -46,7 +51,7 @@ def init_net_params(layer_sizes, scale=0.1, rs=npr.RandomState(0)):
 def nn_predict(params, inputs):
     for W, b in params:
         outputs = np.dot(inputs, W) + b  # [N,D]
-        inputs = relu(outputs)
+        inputs = rbf(outputs)
     return outputs  # [N, dim_last]
 
 def nn_predict_gaussian(params, inputs):
@@ -54,7 +59,8 @@ def nn_predict_gaussian(params, inputs):
 
 def sample_latent(enocder_params, data, n_samples):
     mean, log_std = nn_predict_gaussian(enocder_params, pack(data))
-    return multi_sample_diag_gaussian(mean, log_std, n_samples)
+    print("mean",mean.shape)
+    return repeat_sample_diag_gaussian(mean, log_std, n_samples)
 
 def decoder_predict(params, inputs, latent):
     return nn_predict(params, pack((inputs, latent)))
@@ -101,17 +107,18 @@ def sample_functions(params, inputs, cond_data, num_functions):
     fs = [decoder_predict(decoder_params, inputs, sample_latent(encoder_params, cond_data, inputs.shape[0])) for _ in range(num_functions)]
     return np.concatenate(fs, axis=1)
 
+
 if __name__ == '__main__':
+    dimx, dimz, dimy = 1, 30, 1
+    num_context = 5
+    iters=200
 
-    dimx, dimz, dimy = 1, 1, 1
-    num_context = 10
-
-    encoder_arch = [dimx+dimy, 20, 20, 2*dimz]
-    decoder_arch = [dimx+dimz, 20, 20, dimy]
+    encoder_arch = [dimx+dimy, 25,  2*dimz]
+    decoder_arch = [dimx+dimz, 25,  dimy]
 
     data = sample_data()
     context_data, target_data = get_context_and_target_data(data, num_context)
-    print(dim(context_data),dim(context_data))
+    print(dim(context_data), dim(context_data))
     init_encoder_params = init_net_params(encoder_arch)
     init_decoder_params = init_net_params(decoder_arch)
     combined_params = (init_decoder_params, init_encoder_params)
@@ -131,12 +138,12 @@ if __name__ == '__main__':
     def callback(params, t, g):
         plot_inputs = np.linspace(-8, 8, num=400)[:, None]
         preds = sample_functions(params, plot_inputs, context_data, 10)
-
+        print(preds.shape)
         # Plot data and functions.
 
         plt.cla()
-        ax.plot(x.ravel(), y.ravel(), 'k.')
-        ax.plot(xf.ravel(), yf.ravel(), 'b.')
+        ax.plot(x.ravel(), y.ravel(), 'o')
+        ax.plot(xf.ravel(), yf.ravel(), '.')
 
         ax.plot(plot_inputs, preds, color='r')
         ax.set_title("fitting to toy data")
@@ -148,7 +155,7 @@ if __name__ == '__main__':
 
 
     var_params = adam(grad(objective), combined_params,
-                      step_size=0.1, num_iters=50, callback=callback)
+                      step_size=0.01, num_iters=iters, callback=callback)
 
 
 
