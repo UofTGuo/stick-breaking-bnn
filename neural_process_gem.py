@@ -2,7 +2,7 @@
 
 ### HYPERPARAMS ###
 ystar_log_sigma=20
-elbo_samples=1 # number of times to sample q(z|context,test) in ELBO calc for MC calculation
+elbo_samples=25 # number of times to sample q(z|context,test) in ELBO calc for MC calculation
 ###################
 
 import matplotlib.pyplot as plt
@@ -132,7 +132,7 @@ def sample_functions(params, inputs, cond_data, num_functions):
 
 if __name__ == '__main__':
     dimx, dimz, dimy = 1, 2, 1
-    num_context = 3
+    num_context = 20
     iters=1000
 
     encoder_arch = [dimx+dimy, 80, 80, 2*dimz]
