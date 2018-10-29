@@ -4,9 +4,7 @@ import numpy as np
 import itertools
 #from matplotlib.mlab import biivariate_normal
 from mpl_toolkits.mplot3d import Axes3D
-from util import covariance
 import matplotlib.mlab as mlab
-from gmm import fit_one_gmm
 import seaborn as sns
 from scipy.stats import norm
 sns.set_style("white")
@@ -133,53 +131,6 @@ def save_one_hist(ws, int, mu, sigma, save_name):
     plt.clf()
 
 
-def plot_weights(weights, save_name):  # [ns, nw]
-    mus, var = fit_one_gmm(weights)
-    print('ploting')
-    fig_kw = {'figsize': (20, 20)}
-    fig, axes = plt.subplots(10, 10, **fig_kw)
-    for i, ax in enumerate(axes.reshape(-1)):
-        int = np.random.randint(weights.shape[1])
-        ws = weights[:, i]
-        ax.set_yticklabels([])
-        ax.set_xticklabels([])
-        mu = mus[:, int]
-        sigma = np.sqrt(var[:, int])
-        x = np.linspace(mu - 3 * sigma, mu + 3 * sigma, 100)
-        ax.plot(x, mlab.normpdf(x, mu, sigma))
-        #sns.distplot(ws, kde=False, norm_hist=True, rug=True, ax=ax)
-        ax.hist(ws, bins=30)
-        mu = mus[:, int]
-        sigma = np.sqrt(var[:, int])
-        x = np.linspace(mu - 3 * sigma, mu + 3 * sigma, 100)
-        ax.plot(x, mlab.normpdf(x, mu, sigma))
-#        save_one_hist(ws, int, mu, sigma, save_name)
-    plt.savefig(save_name+"weightspace.pdf", bbox_inches='tight')
-    plt.clf()
-    for i in range(10*10):
-        save_one_hist(weights, i, mu, sigma, save_name)
-
-
-def plot_weights_function_space(weights, funcs, save_name, num=5):  # [ns, nw]
-    for num in range(num):
-        intw = np.random.randint(weights.shape[1]-1)
-        intf = np.random.randint(funcs.shape[1]-1)
-        ws1, ws2 = weights[:, intw], weights[:, intw+1]
-        sns.jointplot(ws1, ws2, kind="scatter", space=0, color='b')
-        plt.title('joint distribution of weights {} and {}'.format(intw,intw+1))
-        plt.xlabel("weight {}".format(intw))
-        plt.ylabel("weight {}".format(intw+1))
-        plt.savefig("jointweightspaceof"+str(intw)+save_name+".pdf", bbox_inches='tight')
-
-        plt.clf()
-        f1, f2 = funcs[:, intf], funcs[:, intf + 1]
-        sns.jointplot(f1, f2, kind='scatter', space=0, color='b')
-        plt.title('joint distribution : $p( f(x_i), f(x_j)$ where i,j ={}{} '.format(intf,intf+1))
-        plt.xlabel("f (x_i) ")
-        plt.ylabel("f(x_j)")
-        plt.savefig("fspace" + str(intf) + save_name + ".pdf", bbox_inches='tight')
-
-
 def functions(xs, fgps, fnns, save_name):  # [ns, nw]
     fig, axes = plt.subplots(2, 2)
     for ax, f, fgp in zip(axes.reshape(-1), fnns, fgps):
@@ -188,19 +139,3 @@ def functions(xs, fgps, fnns, save_name):  # [ns, nw]
     plt.savefig("hyspace"+save_name+".pdf", bbox_inches='tight')
     plt.show()
 
-
-def plot_weights_3d():
-    # Create grid and multivariate normal
-    x = np.linspace(-10, 10, 500)
-    y = np.linspace(-10, 10, 500)
-    X, Y = np.meshgrid(x, y)
-    Z = bivariate_normal(X, Y, sigma_x, sigma_y, mu_x, mu_y)
-
-    # Make a 3D plot
-    fig = plt.figure()
-    ax = fig.gca(projection='3d')
-    ax.plot_surface(X, Y, Z, cmap='viridis', linewidth=0)
-    ax.set_xlabel('X axis')
-    ax.set_ylabel('Y axis')
-    ax.set_zlabel('Z axis')
-    plt.show()
