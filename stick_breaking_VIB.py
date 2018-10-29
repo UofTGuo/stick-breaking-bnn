@@ -11,8 +11,9 @@ from autograd.misc.optimizers import adam
 
 def rbf(x): return np.exp(-x**2)
 def dim(x): return x[0].shape[0]
-def relu(x):    return np.maximum(0, x)
+def relu(x): return np.maximum(0, x)
 def softplus(x): return np.log(1+np.exp(x))
+def sigmoid(x): return 1/(1+np.exp(-x))
 def log_softmax(a): return a-logsumexp(a, axis=1, keepdims=True)
 def beta(a,b): return np.exp(gammaln(a)+gammaln(b)-gammaln(a+b) )
 
@@ -38,43 +39,44 @@ def init_net_params(layer_sizes, scale=0.1, rs=npr.RandomState(0)):
 def nn_predict(params, inputs):
     for W, b in params:
         outputs = np.dot(inputs, W) + b  # [N,D]
-        inputs = softplus(outputs)
+        inputs = rbf(outputs)
     return outputs  # [N, dim_last]
 
-def nn_predict_params(params, inputs):
-    return unpack_params(softplus(nn_predict(params, inputs)))
 
-def sample_kumaraswamy(a, b, n_samples=10):  # [ns, nz]
-    #print(a, b)
+def nn_predict_params(params, inputs):
+    return unpack_params(rbf(nn_predict(params, inputs)))
+
+
+def sample_kumaraswamy(a, b):  # [BS, nz-1]
     u = npr.uniform(size=b.shape)
     #a,b = np.exp(a), np.exp(b)
+    #print(a,b)
     return (1 - u ** (1 / b)) ** (1 / a)
 
+
 def sample_stick_breaking_weights(params, n_samples=1):
-    v_samples = sample_kumaraswamy(*params) # [ns, nw-1]
-    p = params[0][:5]
-    print(p.shape)
-    #print(np.amin(p, axis=1))
-    #print(np.mean(v_samples,axis=1))
-    #exit()
+    v_samples = sample_kumaraswamy(*params) # [nw-1]
+    #print(v_samples)
     v = v_samples
     vm = 1-v_samples
 
-    vs = [v[:, i][:,None]*np.prod(vm[:, :i], axis=1, keepdims=True) for i in range(1,v_samples.shape[1])]
+    vs = [v[:, i][:, None]*np.prod(vm[:, :i], axis=1, keepdims=True) for i in range(1,v_samples.shape[1])]
 
     vl = np.prod(vm, axis=1, keepdims=True)
-#    print(vl.shape)
 
-    w_vectors=[v_samples[:,0][:,None]]+vs+[vl]
+    w_vectors = [v_samples[:,0][:,None]]+vs+[vl]
     weights = np.concatenate(w_vectors, axis=1)
-    #print(weights[0])
+    print(np.round(weights[0],3))
     #print(weights)
 
-    return weights
+    return weights  # [BS, nw-1]
 
 def sample_latent(params, inputs):
     return sample_stick_breaking_weights(nn_predict_params(params, inputs))
 
+
+def sample_latentk(params, inputs):
+        return sample_kumaraswamy(*nn_predict_params(params, inputs))
 
 def decoder_predict(params, latent):
     return log_softmax(nn_predict(params, latent))
@@ -87,7 +89,6 @@ def sample_preds(params, inputs):
 
 
 def stick_breaking_kl(a, b, prior_beta=5, prior_alpha=1):
-    #a, b = np.exp(a), np.exp(b)
 
     kl = 0
     for i in range(1,10):
@@ -103,11 +104,11 @@ def stick_breaking_kl(a, b, prior_beta=5, prior_alpha=1):
     return np.sum(kl, axis=1)
 
 
-def lower_bound(decoder_params, encoder_params, inputs, targets, beta=0):
-
+def lower_bound(decoder_params, encoder_params, inputs, targets, beta=1):
     encoder_ab = nn_predict_params(encoder_params, inputs)  # [batch, K-1]
-    latent = sample_stick_breaking_weights(encoder_ab)  #[BS, K]
+    #latent = sample_kumaraswamy(*encoder_ab)  # [BS, K]
     #print(latent)
+    latent = sample_stick_breaking_weights(encoder_ab)  #[BS, K]
     log_decoder = decoder_predict(decoder_params, latent)  # [nd, nc]
 
     #print(targets.shape, log_decoder.shape, log_encoder_prior.shape, log_encoder.shape)
@@ -123,9 +124,9 @@ def accuracy(params, inputs, targets):
 if __name__ == '__main__':
 
     iters = 200
-    K = 24
+    K = 32
     encoder_arch = [64, 124,  2*(K-1)]
-    decoder_arch = [K, 10]
+    decoder_arch = [K, 100, 10]
 
     init_encoder_params = init_net_params(encoder_arch)
     init_decoder_params = init_net_params(decoder_arch)
@@ -133,7 +134,7 @@ if __name__ == '__main__':
 
     # Training parameters
     batch_size = 256
-    num_epochs = 10
+    num_epochs = 100
     step_size = 0.001
     train_images, train_labels = load_digits(n_class=10, return_X_y=True)
     train_labels = np.eye(10)[train_labels]
